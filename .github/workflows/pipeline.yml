@@ -116,3 +116,54 @@ jobs:
           name: images
           path: images.tar
           retention-days: 1
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: images
+
+      - name: Load the scanned images
+        run: docker load -i images.tar
+
+      - name: Sign in to AWS without a stored key
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push to ECR
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          docker tag fixboard-backend:$TAG ${{ vars.ECR_BACKEND }}:$TAG
+          docker tag fixboard-frontend:$TAG ${{ vars.ECR_FRONTEND }}:$TAG
+          docker push ${{ vars.ECR_BACKEND }}:$TAG
+          docker push ${{ vars.ECR_FRONTEND }}:$TAG
+
+      - name: Record the new tags in Git
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          sed -i -E "s|(image: .*/backend:).*|\1$TAG|" k8s/05-backend.yaml
+          sed -i -E "s|(image: .*/frontend:).*|\1$TAG|" k8s/06-frontend.yaml
+          git add k8s/05-backend.yaml k8s/06-frontend.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "Release $TAG [skip ci]"
+            git push origin main
+          else
+            echo "Image tags already up to date"
+          fi
