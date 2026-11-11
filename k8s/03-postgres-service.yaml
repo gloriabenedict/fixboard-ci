@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+spec:
+  type: ExternalName
+  externalName: fixboard-postgres.cqvu6gggs4mv.us-east-1.rds.amazonaws.com
