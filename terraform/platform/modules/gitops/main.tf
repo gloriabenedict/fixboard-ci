@@ -25,8 +25,9 @@ resource "helm_release" "argocd" {
       rbac = {
         # The ci account may read and sync the fixboard application, nothing else.
         "policy.csv" = join("\n", [
-          "p, role:ci, applications, get, default/fixboard, allow",
+                    "p, role:ci, applications, get, default/fixboard, allow",
           "p, role:ci, applications, sync, default/fixboard, allow",
+          "p, role:ci, projects, get, default, allow",
           "g, ci, role:ci",
         ])
       }
